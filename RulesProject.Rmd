@@ -1,0 +1,193 @@
+---
+title: "Association Rules Project"
+author: "Nuray Nasib"
+output: 
+  html_document:
+    toc: true
+    theme: united
+---
+
+### Market Basket Analysis
+One of the methods of association rules is market basket analysis. This type of method is basically a 'if' and 'then' rule. Simply put, if the consumer has a product in a basket, this approach determines the other items which the customer is most likely to buy. For example, if customers buy a beer then they are likely (with a 90 percent probability) to buy a bag of crisps. Mining such rules is very important in sales branch. Businesses may take advantage of these by organizing the store or catalogs in a specific manner, considering which items are more likely to be purchased together, setting up promotional promotions to promote the selling of a particular product or making customized discounts.
+
+
+The most common laws ("if" and "then") are among all the directions we are searching for. Those provisions are based on indicators:
+
+  * support shows how often itemset appears in the dataset;
+  * confidence indicates how often given rule is true. 1 means 100% correctness;
+  * expected confidence is confidence divided by number of transactions;
+  * lift indicates how more or less likely it is that there will occure a shopping pattern compared to the situation in which items are independent.
+  
+  
+### Data
+
+For the data, I will be using a fictional list of grocery transactions, which can be downloaded from github as it was published as a text file. It can be imported with read.table() function and then transformed into object of class transactions with read.transactions().
+  
+```{r}
+library(stringr)
+Groceries <- read.table("https://raw.githubusercontent.com/stedy/Machine-Learning-with-R-datasets/master/groceries.csv", sep=";")
+head(Groceries)
+```
+```{r}
+transactions <- str_split_fixed(Groceries$V1, ",", n = Inf)
+head(transactions[,1:4])
+```
+```{r}
+write.csv(transactions, file = "transactions.csv", row.names = F)
+```
+```{r}
+library(arules)
+```
+```{r}
+Groceries <- read.transactions("transactions.csv", format = "basket", sep = ",", skip=1)
+```
+
+Groceries contains sales data from a local grocery store with 9835 transactions and 169 items (product groups). The summary shows some basic statistics of the data set. For example, that the data set is rather sparse with a density just above 2.6%, that “whole milk” is the most popular item and that the average transaction contains less than 5 items. Also I can state that there are 2159 transactions consisting only one item and there is a one transaction consisting of 32 items.
+
+```{r}
+summary(Groceries)
+```
+The below plot shows 10 most occuring products in the Groceries data.
+```{r eval=FALSE}
+library(arulesViz)
+```
+```{r}
+itemFrequencyPlot(Groceries, topN=10, type="relative", main="Items Frequency", cex.names=0.8)
+```
+
+
+After I know which items are the most common, let's look at which items are the least frequent. The function below lists 10 items with the loIst frequency ratio and is therefore the least interesting for the customers. It may be caused by the character of the store, or its prices. HoIver, those products should be considered by the store managers.
+
+
+```{r}
+head(sort(itemFrequency(Groceries), decreasing=FALSE), n=10)
+```
+The count of items in basket is also of importance for the study. The diagram below shows the number of products distributed per basket.
+```{r}
+hist(size(Groceries), breaks = 0:40, xaxt="n", ylim=c(0,2500), 
+     main = "Number of items in particular baskets", xlab = "Items")
+axis(1, at=seq(0,40,by=5), cex.axis=0.8)
+```
+
+
+
+It can be seen that those consisting of one element are the most common itemsets. With the number of items the basket count decreases.
+
+### Eclat Algorithm
+The rules are based on the support and confidence level, so I have to define the level of those statistics. I need to do so to be able to analyze most frequent rules/patterns.
+
+Firstly, by using eclat algorithm the most frequent item sets will be shown. The default support is 0.1 but in this dataset a lower value is required to obtain any results.
+
+
+```{r}
+itemsets<-eclat(Groceries, parameter=list(supp=0.01, minlen=2, maxlen=20))
+```
+```{r}
+inspect(head(itemsets))
+```
+
+As shown above, three of the most popular itemsets are the products of the Eclat algorithm. The outcome is determined by the parameters set in the function eclat(). That is a minimum support equal to 0.01, a minimum length of equal to 2 and a maximum length of 20.
+
+The next stage of the study will be to induce the rules of the different itemsets. It will be done using the ruleInduction() function. The function needs at least three arguments: the Eclat algorithm's output object, the fundamental dataset and the confidence parameter specification. Let's assume two confidence levels 1 and 0.5 and check how many rules were set.
+
+```{r}
+rules <- ruleInduction(itemsets, Groceries, confidence=1)
+rules
+```
+```{r}
+rules <- ruleInduction(itemsets, Groceries, confidence=0.5)
+rules
+```
+The rules can only be inspected if one assumes confidence at the 0.5 level. This means that the strength of the rules is between 100% and 50%. Let's look at the mined rules now.
+
+
+
+```{r}
+inspect(rules)
+```
+
+
+
+
+First two-lhs and rhs-refer to the previous itemset (if I buy x ...) and subsequent itemsets (... then I buy y), respectively.
+
+The strongest rule seems to be the one indicating that if someone buys curd and yoghurt, they are 58% likely to buy whole milk too. Moreover, occuring of these items together is 2.28 times the rate I would expect assuming independence of both products. Supports are quite low (2%), but the dataset has 9853 observations so it will be around 219 observations. When it comes to lift I see that items in the best rules appear together 2-3 times more often than would appear together without dependencies.
+
+
+### The Apriori Algorithm
+
+The apriori algorithm utilizes a simple prior belief (hence the name a priori) about the properties of frequent items. Using this a priori belief, all subsets of frequent items must also be frequent. This makes it possible to limit the number of rules to search for. Although both algorithms work differently, the output obtained by Apriori algorithm inspecting rules is exactly the same as the output obtained by applying Eclat algorithm.
+
+```{r}
+summary(rules)
+```
+I can get summary information about the rules that give us some interesting information such as: 
+
+* The number of rules generated: 15
+* The distribution of rules by length: Most rules are 3 items long
+* The summary of quality measures: interesting to see ranges of support, lift, and confidence.
+* The information on the data mined: total data mined, and minimum parameters.
+
+
+I can visualize rules in a form of graph. The arrows shows the direction of the basket rule, eg. if a person buys citrus fruit, it is possible he will also buy other vegetables. The size of circles idicates the support rate and the color indicates the lift. It is easily seen which items are the most frequent combined, for example other vegetables, whole milk or yogurt.
+
+
+```{r}
+library(arulesViz)
+plot(rules, method="graph", shading="lift") 
+```
+
+
+### Individual Rule Representation
+
+Once I performed apriori algorythm and have a more detailed knowledge how in general rules work in the dataset, it is time to look for specific products. First I analyze rules containing yogurt. It turned out that I need to decrease minimal support (to 0.001) in apriori algorythm, otherwise I would receive no results.
+
+```{r}
+rules.milk <- apriori(data=Groceries,  parameter=list(supp=0.01, conf = 0.5, target="rules"), appearance = list(default="lhs", rhs="whole milk"), control=list(verbose=F)) 
+
+rules.milk.byconf <- sort(rules.milk, by="confidence", decreasing=TRUE)
+
+inspect(rules.milk.byconf)
+```
+
+Looking at the confidence, the strongest rule is that curd, yogurt -> whole milk. As to support, the strongest one is other vegetables, yogurt -> whole milk. The highest lift refers to curd, yogurt -> whole milk rule.
+
+```{r}
+rules.fruit <- apriori(data=Groceries,  parameter=list(supp=0.01, conf = 0.2, target="rules"), appearance = list(default="lhs", rhs="tropical fruit"), control=list(verbose=F)) 
+
+rules.fruit.byconf <- sort(rules.fruit, by="confidence", decreasing=TRUE)
+
+inspect(rules.fruit.byconf)
+```
+
+Tropical fruits are chosen by consumers who also buy: other vegetables, yogurt according to highest confidence level. By the highest support level costumers who bought yogurt will also buy tropical fruits.
+
+```{r}
+rules.soda <- apriori(data=Groceries,  parameter=list(supp=0.01, conf = 0.2, target="rules"), appearance = list(default="lhs", rhs="soda"), control=list(verbose=F)) 
+
+rules.soda.byconf <- sort(rules.soda, by="confidence", decreasing=TRUE)
+
+inspect(rules.soda.byconf)
+```
+The strongest rule seem to be chocolate -> soda with the confidence 0.27. The lift is 1.56. However, the most frequent rule on the list is rolls/buns -> soda.
+
+In the analytical part I calculated how yogurt and tropical fruits are related to other products, but it was only part of given task. Tropical fruits are bought by people who buy vegetables and other fruits. So should I put these products on the same shelf for easier access or maybe in the opposite corners of the shop to force clients to go through the whole shop? 
+
+Below one can see graphs of above mined rules.
+
+```{r}
+plot(rules.milk, method="graph", cex=0.7, shading="lift")
+```
+```{r}
+plot(rules.fruit, method="graph", cex=0.7, shading="lift")
+```
+```{r}
+plot(rules.soda, method="graph", cex=0.7, shading="lift")
+```
+
+### Conclusions
+
+To sum up, the analysis above can be used for better placement of products. At the beginning, the strongest rules were discovered. The analysis were also performed on three products:
+
+   * The rules show that yogurt is mostly bought with other dairy prodcuts or fruits. This shows that yogurt should be placed very close to other fruits and dairy products in the shop.
+   * Soda was mostly bought with some kind of snacks. It clearly shows that the shop can offer e.g. packets of Cola and sweets in order to sell more of those products.
